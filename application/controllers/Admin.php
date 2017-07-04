@@ -16,9 +16,7 @@ class Admin extends CI_Controller {
 
 	private $state          = null;
 	private $parsedToken    = null;
-	private $access_token   = null;
 	private $oid            = null;
-	private $code           = null;
 	private $tlog           = null;
 	private $logMode        = 'logfile'; //both, none, logfile, screen
 	private $portalUrl      = 'https://esia-portal1.test.gosuslugi.ru/';
@@ -26,7 +24,7 @@ class Admin extends CI_Controller {
 	private $codeUrl        = 'aas/oauth2/ac';
 	private $tokenUrl       = 'aas/oauth2/te';
 	private $scope          = 'fullname';
-	private $dataCollection = array(); // for multiscope user data requests
+	//private $dataCollection = array(); // for multiscope user data requests
 
 	/*  URL Retrieve  */
 	private function getCodeUrl() {
@@ -67,7 +65,7 @@ class Admin extends CI_Controller {
 		$keyContent			= file_get_contents($path.'cert/self/wifi.sha256.key');
 		$privateKey			= openssl_pkey_get_private($keyContent, $privateKeyPassword);
 		
-		$signResult = openssl_pkcs7_sign(
+		openssl_pkcs7_sign(
 			$messageFile,
 			$signFile,
 			$cert,
@@ -208,7 +206,7 @@ class Admin extends CI_Controller {
 
 	private function verifyState($state) {
 		// проверка возвращённого кода состояния ( Методические рекомендации по использованию ЕСИА v 2.23, Приложение В.2.2)
-		if ( $_GET['state'] === $state) {
+		if ( $this->input->get('state') === $state ) {
 			return true;
 		}
 		return false;
@@ -245,7 +243,7 @@ class Admin extends CI_Controller {
 		$this->state     = $this->getState();
 		$returnURL = $this->config->item("base_url").'admin/getesiatoken/'.$this->state."/".$returnURLID.'/'.$objectID;
 		$secret    = $this->getSecret($this->scope.$timestamp.$this->config->item("IS_MNEMONICS").$this->state);
-		$request_params = array(
+		$requestParams = array(
 			'client_id'		=> $this->config->item("IS_MNEMONICS"),		//good
 			'client_secret'	=> $secret,
 			'redirect_uri'	=> $returnURL,				//good
@@ -255,8 +253,8 @@ class Admin extends CI_Controller {
 			'timestamp'		=> $timestamp,				//good
 			'access_type'	=> 'online',				//good
 		);
-		$this->addToLog("Параметры запроса:\n".print_r($request_params, true)."\n");
-		$options['get_params']  = http_build_query($request_params);
+		$this->addToLog("Параметры запроса:\n".print_r($requestParams, true)."\n");
+		$options['get_params']  = http_build_query($requestParams);
 		$this->addToLog("\nСодержимое ссылки на получение кода от ".$timestamp.":\n\"".$options['get_params']."\n");
 		$this->writeLog("ac_request.log");
 		$this->load->view('esia/auth', $options);
@@ -268,13 +266,13 @@ class Admin extends CI_Controller {
 	}
 
 	public function getesiatoken($state="", $returnURLID = 0, $objectID = 0 ) {
-		if ( isset($_GET['code']) ) {
+		if ( $this->input->get('code') ) {
 			$this->addToLog("Requesting token. See logs for details\n", true);
 			$timestamp   = date('Y.m.d H:i:s O');
 			$this->state = $this->getState();
 
 			if (!$this->verifyState($state)) {
-				$this->addToLog("\nSERVER RETURNED STATE PARAMETER '".$_GET['state']."' WHICH DOES NOT MATCH THE ONE SUPPLIED! Aborting!\n---------------------------------");
+				$this->addToLog("\nSERVER RETURNED STATE PARAMETER '".$this->input->get('state')."' WHICH DOES NOT MATCH THE ONE SUPPLIED! Aborting!\n---------------------------------");
 				$this->writeLog();
 				return false;
 			}
@@ -284,7 +282,7 @@ class Admin extends CI_Controller {
 			
 			$request   = array(
 				'client_id'		=> $this->config->item("IS_MNEMONICS"),
-				'code'			=> $_GET['code'],
+				'code'			=> $this->input->get('code'),
 				'grant_type'	=> 'authorization_code',
 				'client_secret' => $secret,
 				'state'			=> $this->state,
@@ -297,7 +295,7 @@ class Admin extends CI_Controller {
 			$result = $this->sendTokenRequest($request);
 			$this->parsedToken = $this->parseToken($result->access_token);
 			if ($this->verifyToken($this->parsedToken)) {
-				$data = $this->requestuserdata($result->access_token);
+				$this->requestuserdata($result->access_token);
 			}
 			$this->writeLog();
 			return true;
