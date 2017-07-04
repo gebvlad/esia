@@ -1,6 +1,7 @@
 # esia
 A PHP client to a Russian government authentication system for persons. 
 It uses a CodeIgniter 3 framework as infrastructure but can be easily adopted to a standalone behavior.
+
 Provides an OAuth method in REST-API approach.
 Its key functionality is to: 
   - request an authorization code;
