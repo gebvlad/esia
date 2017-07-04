@@ -7,4 +7,5 @@ Its key functionality is to:
   - request an access token;
   - check the access token to comply with ESIA Recommendations (partially);
   - request ESIA for user data set defined both by the provided scope and access token.
+  
 Known problems: yet not performs an ESIA signature check required by Recommendations for OAuth method.
