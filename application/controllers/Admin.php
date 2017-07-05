@@ -6,8 +6,9 @@ class Admin extends CI_Controller {
 	*  https://github.com/fr05t1k/esia/blob/master/src/OpenId.php
 	*  https://habrahabr.ru/post/276313/
 	*
-	*  TODO: multiscope user data requests
-	*        code the correct signature check
+	*  DO: complete $this->getuserdata()
+	       multiscope user data requests
+	*      code the correct signature check
 	*/
 
 	function __construct() {
@@ -59,7 +60,7 @@ class Admin extends CI_Controller {
 
 	/**
 	* Generate state as UUID-formed string
-	*
+	* 
 	* @return string
 	*/
 	private function getState() {
@@ -181,6 +182,13 @@ class Admin extends CI_Controller {
 	}
 
 	/* Logging */
+
+	/**
+	* Forms a logFile string depending on log mode
+	* 
+	* @param $logFile none|logfile|screen|both
+	* @return string
+	*/
 	private function addToLog($message) {
 		if ($this->logMode === "logfile" || $this->logMode === "both") {
 			$this->tlog .= $message;
@@ -191,6 +199,12 @@ class Admin extends CI_Controller {
 		return true;
 	}
 
+	/**
+	* Writes a log to a specified or default file location
+	* 
+	* @param $logFile string
+	* @return string
+	*/
 	private function writeLog($logFile="") {
 		$file = $this->config->item("base_server_path")."esialog.log";
 		if ( strlen($logFile) ) {
@@ -201,7 +215,7 @@ class Admin extends CI_Controller {
 		fclose($open);
 	}
 
-	/*	VERIFICATION */
+	/* VERIFICATION */
 
 	/**
 	* Verifies an access token
@@ -349,6 +363,7 @@ class Admin extends CI_Controller {
 	* Return an URL we redirect an user to.
 	* OR
 	* Return a Codeigniter View with a link
+	* 
 	* @param $returnURLID int
 	* @param $objectID int
 	* @return string|false
@@ -386,7 +401,7 @@ class Admin extends CI_Controller {
 
 	/**
 	* Return an object containing an access token
-	*
+	* 
 	* @return object|false
 	*/
 	private function getESIAToken() {
