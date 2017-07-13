@@ -13,48 +13,39 @@ class Admin extends CI_Controller {
 
 	function __construct() {
 		parent::__construct();
+		$this->load->model("logmodel");
+		$this->load->model("verifymodel");
+		$this->load->model("userdatamodel");
 	}
 
-	private $state          = null;
-	private $parsedToken    = null;
-	private $oid            = null;
-	private $tlog           = null;
-	private $logMode        = 'logfile'; //both, none, logfile, screen
-	private $portalUrl      = 'https://esia-portal1.test.gosuslugi.ru/';
-	private $personUrl      = 'rs/prns';
-	private $codeUrl        = 'aas/oauth2/ac';
-	private $tokenUrl       = 'aas/oauth2/te';
-	private $scope          = 'fullname';
-	//private $dataCollection = array(); // for multiscope user data requests
+	public $dataProfile = array(
+		'openid'     => array('openid'),
+		'contacts'   => array('contacts'),
+		'name'       => array('fullname'),
+		'birthplace' => array('birthplace'),
+		'address'    => array('birthplace', 'contacts')
+	);
 
-	/*  URL Retrieve  */
-
-	/**
-	* Returns an URL for an authorization code
-	*
-	* @return string
-	*/
-	private function getCodeUrl() {
-		return $this->portalUrl.$this->codeUrl."?";
-	}
-
-	/**
-	* Return an URL for an access token
-	*
-	* @return string
-	*/
-	private function getTokenUrl() {
-		return $this->portalUrl.$this->tokenUrl;
-	}
-
-	/**
-	* Return an URL for an user data
-	*
-	* @return string
-	*/
-	private function getPersonUrl() {
-		return $this->portalUrl.$this->personUrl;
-	}
+	private $state                = null;
+	private $parsedToken          = null;
+	public $token_address         = null;
+	public $token_address_data    = null;
+	public $token_birthplace      = null;
+	public $token_birthplace_data = null;
+	public $token_contacts        = null;
+	public $token_contacts_data   = null;
+	public $token_openid          = null;
+	public $token_openid_data     = null;
+	public $token_fullname        = null;
+	public $token_fullname_data   = null;
+	public $scope                 = null;
+	public $oid                   = null;
+	public $tlog                  = null;
+	public $portalUrl             = 'https://esia.gosuslugi.ru/';
+	public $logMode               = 'logfile'; //both, none, logfile, screen
+	private $returnURL            = array(
+		0 => "http://www.arhcity.ru/moduleaddress"
+	);
 
 	/* Cryptografic & hash function wrappers */
 
@@ -93,9 +84,9 @@ class Admin extends CI_Controller {
 
 		file_put_contents($messageFile, $src);
 
-		$certContent		= file_get_contents($path.'cert/self/wifi.sha256.crt');
+		$certContent		= file_get_contents($this->config->item("cert_path").'wifi.sha256.crt');
 		$cert				= openssl_x509_read($certContent);
-		$keyContent			= file_get_contents($path.'cert/self/wifi.sha256.key');
+		$keyContent			= file_get_contents($this->config->item("cert_path").'wifi.sha256.key');
 		$privateKey			= openssl_pkey_get_private($keyContent, $privateKeyPassword);
 		
 		openssl_pkcs7_sign(
@@ -156,7 +147,7 @@ class Admin extends CI_Controller {
 			'hashpart'  => $chunks[0].".".$chunks[1],
 		);
 		$this->oid = $output['oid'] = $output['payload']->{"urn:esia:sbj_id"};
-		$this->addToLog("------------------\nParsed Access Token:\n------------------\n".print_r($output, true)."\n");
+		$this->logmodel->addToLog("------------------\nParsed Access Token:\n------------------\n".print_r($output, true)."\n");
 		return $output;
 	}
 
@@ -175,188 +166,10 @@ class Admin extends CI_Controller {
 			)
 		);
 		$context  = stream_context_create($options);
-		$result   = file_get_contents($this->getTokenUrl(), false, $context);
+		$result   = file_get_contents($this->userdatamodel->getURL('token'), false, $context);
 		$result   = json_decode($result);
-		$this->addToLog("Request was sent sucsessfully. Server returned:\n".print_r($result, true));
+		$this->logmodel->addToLog("Request was sent sucsessfully. Server returned:\n".print_r($result, true));
 		return $result;
-	}
-
-	/* Logging */
-
-	/**
-	* Forms a logFile string depending on log mode
-	* 
-	* @param $logFile none|logfile|screen|both
-	* @return string
-	*/
-	private function addToLog($message) {
-		if ($this->logMode === "logfile" || $this->logMode === "both") {
-			$this->tlog .= $message;
-		}
-		if ($this->logMode === "screen" || $this->logMode === "both") {
-			print nl2br(str_replace(" ", "&nbsp;", $message));
-		}
-		return true;
-	}
-
-	/**
-	* Writes a log to a specified or default file location
-	* 
-	* @param $logFile string
-	* @return string
-	*/
-	private function writeLog($logFile="") {
-		$file = $this->config->item("base_server_path")."esialog.log";
-		if ( strlen($logFile) ) {
-			$file = $this->config->item("base_server_path").$logFile;
-		}
-		$open = fopen($file, "w");
-		fputs($open, $this->tlog);
-		fclose($open);
-	}
-
-	/* VERIFICATION */
-
-	/**
-	* Verifies an access token
-	* 
-	* @param $accessToken array
-	* @return true|false
-	*/
-	private function verifyToken($accessToken) {
-		// проверка токена ( Методические рекомендации по использованию ЕСИА v 2.23, Приложение В.6.4)
-		$this->addToLog("TOKEN VERIFICATION\n");
-		if ( !$this->verifySignature($accessToken) ) {// ................. check signature !!
-			return false;
-		}
-		if ( !$this->verifyMnemonics($accessToken['payload'])) {
-			return false;
-		};
-		if ( !$this->verifyExpiration($accessToken['payload'])) {
-			return false;
-		};
-		if ( !$this->verifyIssuer($accessToken['payload'])) {
-			return false;
-		};
-		return true;
-	}
-
-	/**
-	* Verifies a token issuer
-	* 
-	* @param $accessToken array
-	* @return true|false
-	*/
-	private function verifyIssuer($accessToken) {
-		if ($accessToken->iss === "http://esia.gosuslugi.ru/") {
-			return true;
-		}
-		$this->addToLog("\nToken issuer forged!\n");
-		return false;
-	}
-
-	/**
-	* Verifies a mnemonics sent by ESIA to be a system of ours
-	* 
-	* @param $accessToken array
-	* @return true|false
-	*/
-	private function verifyMnemonics($accessToken) {
-		if ( !isset($accessToken->client_id) && $accessToken->client_id !== $this->config->item("IS_MNEMONICS") ) {
-			$this->addToLog("MNEMONICS: <b>".$accessToken->client_id." - DO NOT MATCH!</b>\n");
-			return false;
-		}
-		$this->addToLog("MNEMONICS: <b>CORRECT</b>\n");
-		return true;
-	}
-
-	/**
-	* Verifies a token sent by ESIA whether it is applicable
-	* 
-	* @param $accessToken array
-	* @return true|false
-	*/
-	private function verifyExpiration($accessToken) {
-		$timeTolerance = 60; // 1 sec can cause failure.
-		if ( (int) date("U") < (int) ($accessToken->nbf - $timeTolerance) || (int) date("U") > (int) $accessToken->exp ) {
-			$this->addToLog("ACTUAL: <b>NO!</b>\nNBF: ".$accessToken->nbf - $timeTolerance."( -".$timeTolerance." sec.),\nNOW: ".date("U").",\nEXP: ".$accessToken->exp."\n");
-			return false;
-		}
-		$this->addToLog("ACTUAL: <b>YES, BIAS: ".(date("U") - (int) $accessToken->nbf)." sec. (-".$timeTolerance." sec. tolerance)</b>\n");
-		return true;
-	}
-
-	/**
-	* Verifies a signature sent by ESIA
-	* disabled
-	* 
-	* @param $accessToken array
-	* @return true|false
-	*/
-	private function verifySignature($accessToken) { // correct it later
-		return true;
-		$algs = array(
-			'RS256' => 'sha256'
-		);
-		
-		$hash = $this->getSecret("HEADER.PAYLOAD");
-		if ( $hash === $accessToken['signature'] ) {
-			$this->addToLog("SIGNATURE: MATCHED OK!\n");
-			return true;
-		}
-		$this->addToLog( "<b>COMPUTED SIGNATURE HASH</b>:<br>\n".$hash."\n<br>DOES NOT MATCH <b>ENCLOSED TOKEN HASH</b>:<br>\n".$accessToken['signature']."<br>\n------------------\n" );
-		return false;
-	}
-
-	/**
-	* Verifies state previously given in return URL with the one provided by us
-	* 
-	* @param $state string
-	* @return string|false
-	*/
-	private function verifyState($state="") {
-		// проверка возвращённого кода состояния ( Методические рекомендации по использованию ЕСИА v 2.23, Приложение В.2.2)
-		if ( !strlen($state) ) {
-			return false;
-		}
-		if ( $this->input->get('state') === $state ) {
-			return true;
-		}
-		return false;
-	}
-
-	/* DATA GETTERS */
-
-	/**
-	* Returns User Data object contents
-	* 
-	* @param $token string
-	* @return string|false
-	*/
-	private function requestUserData($token="") {
-		if ( !strlen($token) ) {
-			$this->addToLog("Access token is missing. Aborting\n");
-			return false;
-		}
-		if ( !strlen($this->oid) ) {
-			$this->addToLog("Object ID is missing. Aborting\n");
-			return false;
-		}
-		$url = $this->getPersonUrl()."/".$this->oid;
-		$options = array(
-			'http' => array(
-				'max_redirects' => 1,
-				'ignore_errors' => 1, // WTF???
-				'header' => 'Authorization: Bearer '.$token,
-				'method'  => 'GET'
-			)
-		);
-		$context = stream_context_create($options);
-		$result  = json_decode(file_get_contents($url, false, $context));
-		print nl2br(str_replace(" ", "&nbsp;", print_r($result, true)));
-		//return $result;
-		$this->addToLog("\n------------------#-#-#------------------\nRequesting User Data\n");
-		$this->addToLog(print_r($result, true));
 	}
 
 	/**
@@ -368,11 +181,11 @@ class Admin extends CI_Controller {
 	* @param $objectID int
 	* @return string|false
 	*/
-	private function requestAuthCode($returnURLID = 0, $objectID = 0) {
+	private function requestAuthCode($returnURLID = 0, $objectID = "c15aa69b-b10e-46de-b124-85dbd0a9f4c9") {
+		$config = json_decode(utf8_encode(file_get_contents($this->config->item("base_server_path")."tickets/".$objectID)));
+		$this->scope = implode($this->dataProfile[$config->profile], " ");
 		//( Методические рекомендации по использованию ЕСИА v 2.23, В.6.2.1 Стандартный режим запроса авторизационного кода)
-		$options = array(
-			'url' => $this->getCodeUrl()
-		);
+
 		$timestamp   = date('Y.m.d H:i:s O');
 		$this->state = $this->getState();
 		$returnURL   = $this->config->item("base_url").'admin/getuserdata/'.$this->state."/".$returnURLID.'/'.$objectID;
@@ -387,16 +200,19 @@ class Admin extends CI_Controller {
 			'timestamp'		=> $timestamp,
 			'access_type'	=> 'online'
 		);
-		$options['get_params'] = http_build_query($requestParams);
-		$this->addToLog("Параметры запроса:\n".print_r($requestParams, true)."\n");
-		$this->addToLog("Содержимое ссылки на получение кода от ".$timestamp.":\n\"".$options['get_params']."\n");
-		$this->writeLog("ac_request.log");
+		$options = array(
+			'url'        => $this->userdatamodel->getURL('code'),
+			'get_params' => http_build_query($requestParams)
+		);
+		$this->logmodel->addToLog("Параметры запроса:\n".print_r($requestParams, true)."\n");
+		$this->logmodel->addToLog("Содержимое ссылки на получение кода от ".$timestamp.":\n\"".$options['get_params']."\n");
+		$this->logmodel->writeLog("ac_request.log");
 		
 		// return http_build_query($requestParams);
 		// OR
 		// in case we use Codeigniter
 		// return to Codeigniter View
-		$this->load->view('esia/auth', $options);
+		return $this->load->view('esia/auth', $options, true);
 	}
 
 	/**
@@ -404,11 +220,11 @@ class Admin extends CI_Controller {
 	* 
 	* @return object|false
 	*/
-	private function getESIAToken() {
+	private function getESIAToken($scope) {
 		$timestamp   = date('Y.m.d H:i:s O');
 		$this->state = $this->getState();
 		$returnURL = $this->config->item("base_url").'admin/getuserdata';
-		$secret    = $this->getSecret($this->scope.$timestamp.$this->config->item("IS_MNEMONICS").$this->state);
+		$secret    = $this->getSecret($scope.$timestamp.$this->config->item("IS_MNEMONICS").$this->state);
 		
 		$request   = array(
 			'client_id'		=> $this->config->item("IS_MNEMONICS"),
@@ -417,13 +233,51 @@ class Admin extends CI_Controller {
 			'client_secret' => $secret,
 			'state'			=> $this->state,
 			'redirect_uri'	=> $returnURL,
-			'scope'			=> $this->scope,
+			'scope'			=> $scope,
 			'timestamp'		=> $timestamp,
 			'token_type'	=> 'Bearer'
 		);
-		$this->addToLog("REQUESTING TOKEN\nToken request @".$timestamp.":\n".print_r($request, true)."\n------------------\n");
+		$this->logmodel->addToLog("REQUESTING TOKEN\nToken request @".$timestamp.":\n".print_r($request, true)."\n------------------\n");
 		return $this->sendTokenRequest($request);
 	}
+
+	private function setTokens($profile) {
+		if ( $profile === "contacts" ) {
+			$this->token_contacts        = $this->getESIAToken($this->dataProfile[$profile][0]);
+			$this->token_contacts_data   = $this->parseToken($this->token_contacts->access_token);
+			if ($this->verifymodel->verifyToken($this->token_contacts_data)) {
+				return true;
+			}
+		}
+		if ( $profile === "address" ) {
+			$this->token_contacts        = $this->getESIAToken($this->dataProfile['contacts'][0]);
+			$this->token_contacts_data   = $this->parseToken($this->token_contacts->access_token);
+			$this->token_birthplace      = $this->getESIAToken($this->dataProfile['birthplace'][0]);
+			$this->token_birthplace_data = $this->parseToken($this->token_birthplace->access_token);
+
+			if ($this->verifymodel->verifyToken($this->token_contacts_data) && $this->verifymodel->verifyToken($this->token_birthplace_data)) {
+				return true;
+			}
+		}
+		if ( $profile === "name" ) {
+			$this->token_fullname        = $this->getESIAToken($this->dataProfile[$profile][0]);
+			$this->token_fullname_data   = $this->parseToken($this->token_fullname->access_token);
+			if ($this->verifymodel->verifyToken($this->token_fullname_data)) {
+				return true;
+			}
+		}
+		if ( $profile === "openid" ) {
+			$this->token_openid          = $this->getESIAToken($this->dataProfile[$profile][0]);
+			$this->token_openid_data     = $this->parseToken($this->token_openid->access_token);
+			if ($this->verifymodel->verifyToken($this->token_openid_data)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+
+
 
 	/* MAIN SECTION GETTER*/
 
@@ -431,7 +285,39 @@ class Admin extends CI_Controller {
 	* redirection
 	*/
 	public function index () {
-		$this->requestAuthCode();
+		//print "No more..";
+		//return false;
+		print $this->requestAuthCode();
+	}
+
+	public function processticket() {
+		if ( !$this->input->post("ticket") ||
+			 !$this->input->post("data") ||
+			 !strlen($this->input->post("ticket")) ||
+			 !strlen($this->input->post("data")) 
+			) {
+			$this->logmodel->addToLog("A REQUIRED FIELD: POST['data'] or POST['ticket'] IS MISSING OR EMPTY\n");
+			print "A REQUIRED FIELD: POST['data'] or POST['ticket'] IS MISSING OR EMPTY<br>";
+			$this->logmodel->writeLog("ticket");
+			return false;
+		}
+		$data = json_decode($this->input->post("data"));
+		if ( !$data ) {
+			$this->logmodel->addToLog("SEARCH PATTERN COULD NOT BE PARSED AS VALID JSON\n");
+			print "SEARCH PATTERN COULD NOT BE PARSED AS VALID JSON<br>";
+			$this->logmodel->writeLog("ticket");
+			return false;
+		}
+
+		if( FALSE === file_put_contents($this->config->item("base_server_path")."tickets/".$this->input->post("ticket"), $this->input->post("data"))) {
+			$this->logmodel->addToLog("A TICKET COULD NOT BE WRITTEN\n");
+			$this->logmodel->writeLog("ticket");
+			return false;
+		}
+		$this->logmodel->addToLog("A TICKET WAS PROCESSED SUCCESFULLY\n");
+		$this->logmodel->writeLog("ticket");
+		print $this->requestAuthCode($returnURLID = 0, $this->input->post("ticket"));
+		return true;
 	}
 
 	/**
@@ -443,25 +329,114 @@ class Admin extends CI_Controller {
 	* @return true|false
 	*/
 	public function getuserdata($state = "", $returnURLID = 0, $objectID = 0 ) {
-		if ( !$this->verifyState($state) ) {
-			$this->addToLog("\nSERVER RETURNED STATE PARAMETER '".$this->input->get('state')."' WHICH DOES NOT MATCH THE ONE SUPPLIED! Aborting!\n------------------");
-			$this->writeLog();
+		if ( !$this->verifymodel->verifyState($state) ) {
 			return false;
 		}
-		// Codeigniter-style verification
 		if ( $this->input->get('code') ) {
-			$tokenData   = $this->getESIAToken();
-			$parsedToken = $this->parseToken($tokenData->access_token);
-			if ($this->verifyToken($parsedToken)) {
-				// this, actually, shall be a return value:
-				$this->requestUserData($tokenData->access_token);
+			$config = json_decode(utf8_encode(file_get_contents($this->config->item("base_server_path")."tickets/".$objectID)));
+			if ( $this->setTokens($config->profile) ) {
+				// если удалось получить и проверить все токены:
+				if ($config->profile === 'name') {
+					$this->userdatamodel->requestUserData($this->token_fullname->access_token, 'name');
+				}
+				if ($config->profile === 'birthplace') {
+					$this->userdatamodel->requestUserData($this->token_birthplace->access_token, 'birthplace');
+				}
+				if ($config->profile === 'contacts') {
+					$this->userdatamodel->requestUserData($this->token_contacts->access_token, 'contacts');
+				}
+				if ($config->profile === 'address') {
+					$this->userdatamodel->requestUserData($this->token_contacts->access_token, 'address');
+					$this->userdatamodel->requestUserData($this->token_birthplace->access_token, 'birthplace');
+				}
+				$userdata = array(
+					'oid'			=> $this->oid,
+					'trusted'		=> $this->userdatamodel->trusted,
+					'fullname'		=> $this->userdatamodel->fullname,
+					'birthplace'	=> $this->userdatamodel->birthplace,
+					'cellphone'		=> $this->userdatamodel->cel_ph,
+					'email'			=> $this->userdatamodel->email,
+					'birthplace'	=> $this->userdatamodel->birthplace,
+					'prg'			=> array(
+						'region'	=> $this->userdatamodel->reg_region,
+						'city'		=> $this->userdatamodel->reg_city,
+						'street'	=> $this->userdatamodel->reg_street,
+						'house'		=> $this->userdatamodel->reg_house,
+						'frame'		=> $this->userdatamodel->reg_frame,
+						'flat'		=> $this->userdatamodel->reg_flat,
+						'fias'		=> $this->userdatamodel->reg_fias
+					),
+					'plv'			=> array(
+						'region'	=> $this->userdatamodel->plv_region,
+						'city'		=> $this->userdatamodel->plv_city,
+						'street'	=> $this->userdatamodel->plv_street,
+						'house'		=> $this->userdatamodel->plv_house,
+						'frame'		=> $this->userdatamodel->plv_frame,
+						'flat'		=> $this->userdatamodel->plv_flat,
+						'fias'		=> $this->userdatamodel->plv_fias
+					)
+				);
+
+				$this->logmodel->addToLog( "\n------------------\nUSER DATA SET:\n".print_r($userdata, true)."\n" );
+
+				$backRequest = array(
+					'oid'      => $userdata['oid'],
+					'ticket'   => $objectID,
+					'valid'    => $this->userdatamodel->processUserMatching($userdata, $objectID),
+					'verified' => $userdata['trusted']
+				);
+				print_r($backRequest);
+
+				$options = array(
+					'http' => array(
+						'content' => http_build_query($backRequest),
+						'header'  => 'Content-type: application/x-www-form-urlencoded',
+						'method'  => 'POST'
+					)
+				);
+				$context  = stream_context_create($options);
+				$url = $this->returnURL[$returnURLID];
+				//$result   = file_get_contents($url, false, $context);
+				$result = FALSE;
+				if ($result === FALSE) {
+					$this->logmodel->addToLog( "CALLBACK REQUEST TO ".$url." FAILED!\n" );
+					$this->logmodel->writeLog();
+					return false;
+				}
+				$this->logmodel->addToLog( "\nCOMPLETED SUCCESSFULLY!\n" );
+				$this->logmodel->writeLog();
+				return true;
 			}
-			$this->writeLog();
-			return true;
+			$this->logmodel->addToLog( "\nUNABLE TO COLLECT REQUIRED ACCESS TOKENS!\n" );
 		}
-		$this->addToLog( "Authorization Code was not provided" );
-		$this->writeLog();
+		$this->logmodel->addToLog( "Authorization Code was not provided" );
+		$this->logmodel->writeLog();
 		return false;
 	}
+	
+	/*
+	public function writeTokenFile() {
+		$objectID = "c15aa69b-b10e-46de-b124-85dbd0a9f4c9";
+		
+		$file   = file_get_contents($this->config->item("base_server_path")."tickets/".$objectID);
+		$config = json_decode($file);
+
+		$ticket = array(
+			"profile"     => "address",
+			"matchParams" => array(
+				"region"  => "Архангельская обл",
+				"city"    => array(
+					"г Архангельск"   => array(
+						"ул Гагарина" => array("4","3","7","5","9","10"),
+						"ул Ленина"   => array("4","3","7","5","9","10")
+					)
+				)
+			)
+		);
+		$json = json_encode($ticket);
+		print $json;
+		$file   = file_put_contents($this->config->item("base_server_path")."tickets/".$objectID, $json);
+	}
+	*/
 }
 ?>
