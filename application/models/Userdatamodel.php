@@ -47,7 +47,6 @@ class Userdatamodel extends CI_Model {
 	public $cel_ph         = null;
 	public $trusted        = null;
 
-	private $reqmode = null;
 
 	/* DATA GETTERS */
 
@@ -158,40 +157,41 @@ class Userdatamodel extends CI_Model {
 	}
 
 	private function checkCity($userdata, $pattern) {
-
-		//print_r($pattern->city);
 		$valid = 0;
 		foreach ( $pattern->city as $city => $streets ) {
-			//print str_replace(".", "", $userdata['birthplace'])." - - ".$city;
+			//print str_replace(".", "", $userdata['birthplace'])." - - ".$city. " - - " .$userdata['prg']['city']." - - ".$userdata['plv']['city'].'<br><br>';
 			if ( $city !== $userdata['prg']['city'] &&
 				 $city !== $userdata['plv']['city'] &&
 				 !stristr(str_replace(".", "", $userdata['birthplace']), $city)
 			) {
-				$valid = ($valid) ? 1 : 0;
-			} else {
-				$valid = 0;
+				$valid = ($valid) ? 0 : 1;
 			}
 		}
+		//print $valid;
 		return $valid;
 	}
 
 	private function checkStreet($userdata, $pattern) {
-		foreach ( $pattern->city as $city => $streets ) {
+		foreach ( $pattern->city as $streets ) {
 			// если список улиц пустой, то подходит любая улица / город целиком
 			if ( !sizeof($streets) ) {
+				print 1;
 				return 1;
+
 			}
 			foreach ($streets as $street => $houses) {
 				if ( sizeof($streets) && $street === $userdata['prg']["street"] || $street === $userdata['plv']["street"] ) {
-					$valid = 1;
 					// если список домов пустой, то подходит любая дом / улица целиком
 					if ( !sizeof($houses) ){
+						//print 1;
 						return 1;
 					}
 					// если дом входит в список домов на улице
 					if ( is_array($houses) && sizeof($houses) && ( in_array( $userdata['prg']["house"], $houses) || in_array($userdata['plv']["house"], $houses ) )) {
+						//print 1;
 						return 1;
 					}
+					//print 0;
 					return 0;
 				}
 			}

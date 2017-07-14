@@ -446,7 +446,7 @@ class Admin extends CI_Controller {
 				);
 				//print_r($userdata);
 				//print "<br><br>";
-				//print_r($backRequest);
+				print_r($backRequest);
 
 				$this->sendCallbackToClient($returnURLID, $backRequest);
 				$this->logmodel->addToLog( "\nCOMPLETED SUCCESSFULLY!\n" );
@@ -462,7 +462,7 @@ class Admin extends CI_Controller {
 
 
 	
-	/*
+	
 	public function writeTokenFile() {
 		$objectID = "c15aa69b-b10e-46de-b124-85dbd0a9f4c9";
 		
@@ -470,14 +470,15 @@ class Admin extends CI_Controller {
 		$config = json_decode($file);
 
 		$ticket = array(
-			"profile"     => "fulldata",
+			"profile"     => "address",
 			"matchParams" => array(
 				"region"  => "Архангельская обл",
 				"city"    => array(
 					"г Архангельск"   => array(
-						"ул Гагарина" => array("4","3","7","5","9","10"),
+						"ул Гагарина" => array("4","3","7","32","9","10"),
 						"ул Ленина"   => array("4","3","7","5","9","10")
-					)
+					),
+					"г Северодвинск" => array()
 				)
 			)
 		);
@@ -485,6 +486,6 @@ class Admin extends CI_Controller {
 		print $json;
 		$file   = file_put_contents($this->config->item("base_server_path")."tickets/".$objectID, $json);
 	}
-	*/
+	
 }
 ?>
