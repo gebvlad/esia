@@ -23,11 +23,11 @@ class Admin extends CI_Controller {
 		'contacts'   => array('contacts'),
 		'name'       => array('fullname'),
 		'birthplace' => array('birthplace'),
-		'address'    => array('birthplace', 'contacts')
+		'address'    => array('birthplace', 'contacts'),
+		'fulldata'   => array('birthplace', 'contacts', 'fullname')
 	);
 
-	private $state                = null;
-	private $parsedToken          = null;
+
 	public $token_address         = null;
 	public $token_address_data    = null;
 	public $token_birthplace      = null;
@@ -38,14 +38,14 @@ class Admin extends CI_Controller {
 	public $token_openid_data     = null;
 	public $token_fullname        = null;
 	public $token_fullname_data   = null;
+	public $tokenFullInfo         = null;
+	public $tokenFullInfo_data    = null;
 	public $scope                 = null;
 	public $oid                   = null;
 	public $tlog                  = null;
 	public $portalUrl             = 'https://esia.gosuslugi.ru/';
 	public $logMode               = 'logfile'; //both, none, logfile, screen
-	private $returnURL            = array(
-		0 => "http://www.arhcity.ru/moduleaddress"
-	);
+	private $state                = null;
 
 	/* Cryptografic & hash function wrappers */
 
@@ -73,7 +73,6 @@ class Admin extends CI_Controller {
 	* 
 	* @param string $src
 	* @return string
-	* @throws SignFailException
 	*/
 	private function getSecret($src) {
 		$sign				= null;
@@ -198,7 +197,7 @@ class Admin extends CI_Controller {
 			'response_type'	=> 'code',
 			'state'			=> $this->state,
 			'timestamp'		=> $timestamp,
-			'access_type'	=> 'online'
+			'access_type'	=> 'offine'
 		);
 		$options = array(
 			'url'        => $this->userdatamodel->getURL('code'),
@@ -206,7 +205,7 @@ class Admin extends CI_Controller {
 		);
 		$this->logmodel->addToLog("Параметры запроса:\n".print_r($requestParams, true)."\n");
 		$this->logmodel->addToLog("Содержимое ссылки на получение кода от ".$timestamp.":\n\"".$options['get_params']."\n");
-		$this->logmodel->writeLog("ac_request.log");
+		$this->logmodel->writeLog("esia_authcode.log");
 		
 		// return http_build_query($requestParams);
 		// OR
@@ -259,6 +258,19 @@ class Admin extends CI_Controller {
 				return true;
 			}
 		}
+		if ( $profile === "fulldata" ) {
+			$this->token_contacts        = $this->getESIAToken($this->dataProfile['contacts'][0]);
+			$this->token_contacts_data   = $this->parseToken($this->token_contacts->access_token);
+			$this->token_birthplace      = $this->getESIAToken($this->dataProfile['birthplace'][0]);
+			$this->token_birthplace_data = $this->parseToken($this->token_birthplace->access_token);
+			$this->token_fullname        = $this->getESIAToken($this->dataProfile[$profile][0]);
+			$this->token_fullname_data   = $this->parseToken($this->token_fullname->access_token);
+
+			if ($this->verifymodel->verifyToken($this->token_contacts_data) && $this->verifymodel->verifyToken($this->token_birthplace_data)) {
+				return true;
+			}
+		}
+
 		if ( $profile === "name" ) {
 			$this->token_fullname        = $this->getESIAToken($this->dataProfile[$profile][0]);
 			$this->token_fullname_data   = $this->parseToken($this->token_fullname->access_token);
@@ -277,7 +289,29 @@ class Admin extends CI_Controller {
 	}
 
 
-
+	private function sendCallbackToClient($returnURLID, $backRequest) {
+		if ( !$this->config->item('system_online') ){
+			return false;
+		}
+		$result = false;
+		$options = array(
+			'http' => array(
+				'content' => http_build_query($backRequest),
+				'header'  => 'Content-type: application/x-www-form-urlencoded',
+				'method'  => 'POST'
+			)
+		);
+		$context = stream_context_create($options);
+		$urls    = $this->config->item('returnURLS');
+		$url     = $urls[$returnURLID];
+		$result  = file_get_contents($url, false, $context);
+		if ($result === FALSE) {
+			$this->logmodel->addToLog( "CALLBACK REQUEST TO ".$url." FAILED OR SYSTEM NOW OFFLINE!\n" );
+			$this->logmodel->writeLog();
+			return false;
+		}
+		return $result;
+	}
 
 	/* MAIN SECTION GETTER*/
 
@@ -291,31 +325,37 @@ class Admin extends CI_Controller {
 	}
 
 	public function processticket() {
-		if ( !$this->input->post("ticket") ||
-			 !$this->input->post("data") ||
-			 !strlen($this->input->post("ticket")) ||
-			 !strlen($this->input->post("data")) 
+		if (   !$this->input->post("ticket")
+			|| !$this->input->post("data")
+			|| !$this->input->post("systemID")
+			|| !strlen($this->input->post("ticket"))
+			|| !strlen($this->input->post("data"))
+			|| !strlen($this->input->post("systemID"))
 			) {
 			$this->logmodel->addToLog("A REQUIRED FIELD: POST['data'] or POST['ticket'] IS MISSING OR EMPTY\n");
-			print "A REQUIRED FIELD: POST['data'] or POST['ticket'] IS MISSING OR EMPTY<br>";
-			$this->logmodel->writeLog("ticket");
+			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
 		$data = json_decode($this->input->post("data"));
 		if ( !$data ) {
 			$this->logmodel->addToLog("SEARCH PATTERN COULD NOT BE PARSED AS VALID JSON\n");
-			print "SEARCH PATTERN COULD NOT BE PARSED AS VALID JSON<br>";
-			$this->logmodel->writeLog("ticket");
+			$this->logmodel->writeLog("esia_ticket.log");
+			return false;
+		}
+		$URLS = $this->config->item('returnURLS');
+		if ( !isset($URLS[$this->input->post("systemID")]) ) {
+			$this->logmodel->addToLog("SYSTEM ID: ".$this->input->post("systemID")." NOT FOUND\n");
+			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
 
 		if( FALSE === file_put_contents($this->config->item("base_server_path")."tickets/".$this->input->post("ticket"), $this->input->post("data"))) {
 			$this->logmodel->addToLog("A TICKET COULD NOT BE WRITTEN\n");
-			$this->logmodel->writeLog("ticket");
+			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
 		$this->logmodel->addToLog("A TICKET WAS PROCESSED SUCCESFULLY\n");
-		$this->logmodel->writeLog("ticket");
+		$this->logmodel->writeLog("esia_ticket.log");
 		print $this->requestAuthCode($returnURLID = 0, $this->input->post("ticket"));
 		return true;
 	}
@@ -332,22 +372,41 @@ class Admin extends CI_Controller {
 		if ( !$this->verifymodel->verifyState($state) ) {
 			return false;
 		}
-		if ( $this->input->get('code') ) {
+		//var_dump($this->input->get('code'));
+		if ( $this->input->get('error') ) {
+			$errorRequest = array(
+				'ticket'      => $objectID,
+				'error'       => $this->input->get('error'),
+				'description' => $this->input->get('error_description')
+			);
+			$this->logmodel->addToLog( "USER DENIED ACCESS" );
+			//print_r($errorRequest);
+			$this->sendCallbackToClient($returnURLID, $errorRequest);
+			$this->logmodel->writeLog();
+			return false;
+		}
+		if ( strlen($this->input->get('code')) ) {
 			$config = json_decode(utf8_encode(file_get_contents($this->config->item("base_server_path")."tickets/".$objectID)));
 			if ( $this->setTokens($config->profile) ) {
 				// если удалось получить и проверить все токены:
 				if ($config->profile === 'name') {
-					$this->userdatamodel->requestUserData($this->token_fullname->access_token, 'name');
+					$this->userdatamodel->requestUserData($this->token_fullname->access_token,   'name');
 				}
 				if ($config->profile === 'birthplace') {
 					$this->userdatamodel->requestUserData($this->token_birthplace->access_token, 'birthplace');
 				}
 				if ($config->profile === 'contacts') {
-					$this->userdatamodel->requestUserData($this->token_contacts->access_token, 'contacts');
+					$this->userdatamodel->requestUserData($this->token_contacts->access_token,   'contacts');
 				}
 				if ($config->profile === 'address') {
-					$this->userdatamodel->requestUserData($this->token_contacts->access_token, 'address');
+					$this->userdatamodel->requestUserData($this->token_contacts->access_token,   'address');
 					$this->userdatamodel->requestUserData($this->token_birthplace->access_token, 'birthplace');
+				}
+				if ($config->profile === 'fulldata') {
+					$this->userdatamodel->requestUserData($this->token_contacts->access_token,   'address');
+					$this->userdatamodel->requestUserData($this->token_contacts->access_token,   'contacts');
+					$this->userdatamodel->requestUserData($this->token_birthplace->access_token, 'birthplace');
+					$this->userdatamodel->requestUserData($this->token_fullname->access_token,   'name');
 				}
 				$userdata = array(
 					'oid'			=> $this->oid,
@@ -382,27 +441,14 @@ class Admin extends CI_Controller {
 				$backRequest = array(
 					'oid'      => $userdata['oid'],
 					'ticket'   => $objectID,
-					'valid'    => $this->userdatamodel->processUserMatching($userdata, $objectID),
+					'valid'    => $this->userdatamodel->processUserMatching($userdata, $objectID, $config->profile),
 					'verified' => $userdata['trusted']
 				);
-				print_r($backRequest);
+				//print_r($userdata);
+				//print "<br><br>";
+				//print_r($backRequest);
 
-				$options = array(
-					'http' => array(
-						'content' => http_build_query($backRequest),
-						'header'  => 'Content-type: application/x-www-form-urlencoded',
-						'method'  => 'POST'
-					)
-				);
-				$context  = stream_context_create($options);
-				$url = $this->returnURL[$returnURLID];
-				//$result   = file_get_contents($url, false, $context);
-				$result = FALSE;
-				if ($result === FALSE) {
-					$this->logmodel->addToLog( "CALLBACK REQUEST TO ".$url." FAILED!\n" );
-					$this->logmodel->writeLog();
-					return false;
-				}
+				$result = $this->sendCallbackToClient($returnURLID, $backRequest);
 				$this->logmodel->addToLog( "\nCOMPLETED SUCCESSFULLY!\n" );
 				$this->logmodel->writeLog();
 				return true;
@@ -413,6 +459,8 @@ class Admin extends CI_Controller {
 		$this->logmodel->writeLog();
 		return false;
 	}
+
+
 	
 	/*
 	public function writeTokenFile() {
@@ -422,7 +470,7 @@ class Admin extends CI_Controller {
 		$config = json_decode($file);
 
 		$ticket = array(
-			"profile"     => "address",
+			"profile"     => "fulldata",
 			"matchParams" => array(
 				"region"  => "Архангельская обл",
 				"city"    => array(

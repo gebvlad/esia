@@ -31,7 +31,7 @@ class Logmodel extends CI_Model {
 	* @return string
 	*/
 	public function writeLog($logFile="") {
-		$file = $this->config->item("base_server_path")."esialog.log";
+		$file = $this->config->item("base_server_path")."esia_log.log";
 		if ( strlen($logFile) ) {
 			$file = $this->config->item("base_server_path").$logFile;
 		}

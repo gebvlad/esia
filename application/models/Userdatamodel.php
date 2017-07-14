@@ -152,24 +152,24 @@ class Userdatamodel extends CI_Model {
 
 	private function checkRegion($userdata, $pattern) {
 		if ( $pattern->region === $userdata['prg']["region"] || $userdata['plv']["region"] ) {
-			return true;
+			return 1;
 		}
-		return false;
+		return 0;
 	}
 
 	private function checkCity($userdata, $pattern) {
 
 		//print_r($pattern->city);
-		$valid = false;
+		$valid = 0;
 		foreach ( $pattern->city as $city => $streets ) {
 			//print str_replace(".", "", $userdata['birthplace'])." - - ".$city;
 			if ( $city !== $userdata['prg']['city'] &&
 				 $city !== $userdata['plv']['city'] &&
 				 !stristr(str_replace(".", "", $userdata['birthplace']), $city)
 			) {
-				$valid = ($valid) ? true : false;
+				$valid = ($valid) ? 1 : 0;
 			} else {
-				$valid = true;
+				$valid = 0;
 			}
 		}
 		return $valid;
@@ -198,12 +198,15 @@ class Userdatamodel extends CI_Model {
 		}
 	}
 
-	public function processUserMatching($userdata, $objectID) {
+	public function processUserMatching($userdata, $objectID, $profile) {
+		if ( $profile !== "address" ) {
+			return 1;
+		}
 		$pattern = json_decode(file_get_contents($this->config->item("base_server_path")."tickets/".$objectID));
 		//print_r($userdata);
 		//print nl2br(str_replace(" ", "&nbsp;", print_r($pattern, true)));
 		$pattern = $pattern->matchParams;
-		$valid = true;
+		$valid = 1;
 		if ( !isset($pattern->region) ) {
 			return 1;
 		}
