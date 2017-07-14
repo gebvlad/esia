@@ -342,8 +342,8 @@ class Admin extends CI_Controller {
 			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
-		$URLS = $this->config->item('returnURLS');
-		if ( !isset($URLS[$this->input->post("systemID")]) ) {
+		$URLs = $this->config->item('returnURLS');
+		if ( !isset($URLs[$this->input->post("systemID")]) ) {
 			$this->logmodel->addToLog("SYSTEM ID: ".$this->input->post("systemID")." NOT FOUND\n");
 			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
@@ -448,7 +448,7 @@ class Admin extends CI_Controller {
 				//print "<br><br>";
 				//print_r($backRequest);
 
-				$result = $this->sendCallbackToClient($returnURLID, $backRequest);
+				$this->sendCallbackToClient($returnURLID, $backRequest);
 				$this->logmodel->addToLog( "\nCOMPLETED SUCCESSFULLY!\n" );
 				$this->logmodel->writeLog();
 				return true;
