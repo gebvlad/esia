@@ -36,7 +36,7 @@ class Userdatamodel extends CI_Model {
 	* @return string
 	*/
 	public function getURL($urlType='name') {
-		$Urls = array(
+		$urls = array(
 			'code'       => 'aas/oauth2/ac?',
 			'token'      => 'aas/oauth2/te',
 			'fullname'   => 'rs/prns/'.$this->oid,
@@ -45,7 +45,7 @@ class Userdatamodel extends CI_Model {
 			'contacts'   => 'rs/prns/'.$this->oid.'/ctts',
 			'openid'     => 'rs/prns/'.$this->oid
 		);
-		return $this->portalUrl.$Urls[$urlType];
+		return $this->portalUrl.$urls[$urlType];
 	}
 
 	/* DATA GETTERS */
