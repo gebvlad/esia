@@ -231,7 +231,11 @@ class Admin extends CI_Controller {
 		$this->logmodel->addToLog("REQUESTING TOKEN\nToken request @".$timestamp.":\n".print_r($request, true)."\n------------------\n");
 		return $this->sendTokenRequest($request);
 	}
-
+	/**
+	* Sets an access token depending on profile
+	* 
+	* @return true|false
+	*/
 	private function setTokens($profile) {
 		foreach ($this->dataProfile[$profile]["scopes"] as $scope) {
 			$this->{"token_".$scope}         = $this->getESIAToken( $scope );
@@ -243,11 +247,15 @@ class Admin extends CI_Controller {
 		return true;
 	}
 
+	/**
+	* Send a callback to a client system with authentication result
+	* 
+	* @return object|false
+	*/
 	private function sendCallbackToClient($returnURLID, $backRequest) {
 		if ( !$this->config->item('system_online') ){
 			return false;
 		}
-		$result = false;
 		$options = array(
 			'http' => array(
 				'content' => http_build_query($backRequest),
@@ -260,7 +268,7 @@ class Admin extends CI_Controller {
 		$url     = $urls[$returnURLID];
 		$result  = file_get_contents($url, false, $context);
 		if ($result === FALSE) {
-			$this->logmodel->addToLog( "CALLBACK REQUEST TO ".$url." FAILED OR SYSTEM NOW OFFLINE!\n" );
+			$this->logmodel->addToLog( "Callback request to ".$url." failed or system now offline!\n" );
 			$this->logmodel->writeLog();
 			return false;
 		}
@@ -273,9 +281,9 @@ class Admin extends CI_Controller {
 	* redirection
 	*/
 	public function index () {
-		//print "No more..";
-		//return false;
-		print $this->requestAuthCode();
+		print "No more..";
+		return false;
+		//print $this->requestAuthCode();
 	}
 
 	public function processticket() {
@@ -320,26 +328,25 @@ class Admin extends CI_Controller {
 			'trusted'		=> $this->userdatamodel->trusted,
 			'fullname'		=> $this->userdatamodel->fullname,
 			'birthplace'	=> $this->userdatamodel->birthplace,
-			'cellphone'		=> $this->userdatamodel->cel_ph,
+			'cellphone'		=> $this->userdatamodel->cellPhone,
 			'email'			=> $this->userdatamodel->email,
-			'birthplace'	=> $this->userdatamodel->birthplace,
 			'prg'			=> array(
-				'region'	=> $this->userdatamodel->reg_region,
-				'city'		=> $this->userdatamodel->reg_city,
-				'street'	=> $this->userdatamodel->reg_street,
-				'house'		=> $this->userdatamodel->reg_house,
-				'frame'		=> $this->userdatamodel->reg_frame,
-				'flat'		=> $this->userdatamodel->reg_flat,
-				'fias'		=> $this->userdatamodel->reg_fias
+				'region'	=> $this->userdatamodel->regRegion,
+				'city'		=> $this->userdatamodel->regCity,
+				'street'	=> $this->userdatamodel->regStreet,
+				'house'		=> $this->userdatamodel->regHouse,
+				'frame'		=> $this->userdatamodel->regFrame,
+				'flat'		=> $this->userdatamodel->regFlat,
+				'fias'		=> $this->userdatamodel->regFias
 			),
 			'plv'			=> array(
-				'region'	=> $this->userdatamodel->plv_region,
-				'city'		=> $this->userdatamodel->plv_city,
-				'street'	=> $this->userdatamodel->plv_street,
-				'house'		=> $this->userdatamodel->plv_house,
-				'frame'		=> $this->userdatamodel->plv_frame,
-				'flat'		=> $this->userdatamodel->plv_flat,
-				'fias'		=> $this->userdatamodel->plv_fias
+				'region'	=> $this->userdatamodel->plvRegion,
+				'city'		=> $this->userdatamodel->plvCity,
+				'street'	=> $this->userdatamodel->plvStreet,
+				'house'		=> $this->userdatamodel->plvHouse,
+				'frame'		=> $this->userdatamodel->plvFrame,
+				'flat'		=> $this->userdatamodel->plvFlat,
+				'fias'		=> $this->userdatamodel->plvFias
 			)
 		);
 	}
@@ -412,30 +419,6 @@ class Admin extends CI_Controller {
 		return false;
 	}
 
-	/*
-	public function writeTokenFile() {
-		$objectID = "c15aa69b-b10e-46de-b124-85dbd0a9f4c9";
-		
-		$file   = file_get_contents($this->config->item("base_server_path")."tickets/".$objectID);
-		$config = json_decode($file);
 
-		$ticket = array(
-			"profile"     => "address",
-			"matchParams" => array(
-				"region"  => "Архангельская обл",
-				"city"    => array(
-					"г Архангельск"   => array(
-						"ул Гагарина" => array("4","3","7","32","9","10"),
-						"ул Ленина"   => array("4","3","7","5","9","10")
-					),
-					"г Северодвинск" => array()
-				)
-			)
-		);
-		$json = json_encode($ticket);
-		print $json;
-		$file   = file_put_contents($this->config->item("base_server_path")."tickets/".$objectID, $json);
-	}
-	*/
 }
 ?>

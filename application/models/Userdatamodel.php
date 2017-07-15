@@ -7,6 +7,27 @@ class Userdatamodel extends CI_Model {
 		parent::__construct();
 	}
 
+
+	public $fullname       = null;
+	public $regregion     = null;
+	public $regCity       = null;
+	public $regStreet     = null;
+	public $regHouse      = null;
+	public $regFrame      = null;
+	public $regFlat       = null;
+	public $regFias       = null;
+	public $plvRegion     = null;
+	public $plvCity       = null;
+	public $plvStreet     = null;
+	public $plvHouse      = null;
+	public $plvFrame      = null;
+	public $plvFlat       = null;
+	public $plvFias       = null;
+	public $birthplace     = null;
+	public $email          = null;
+	public $cellPhone      = null;
+	public $trusted        = null;
+
 	/*  URL Retrieve  */
 
 	/**
@@ -14,28 +35,8 @@ class Userdatamodel extends CI_Model {
 	* @param string $URLType: code|token|fullname|birthplace|address|contacts|openid
 	* @return string
 	*/
-	public $fullname       = null;
-	public $reg_region     = null;
-	public $reg_city       = null;
-	public $reg_street     = null;
-	public $reg_house      = null;
-	public $reg_frame      = null;
-	public $reg_flat       = null;
-	public $reg_fias       = null;
-	public $plv_region     = null;
-	public $plv_city       = null;
-	public $plv_street     = null;
-	public $plv_house      = null;
-	public $plv_frame      = null;
-	public $plv_flat       = null;
-	public $plv_fias       = null;
-	public $birthplace     = null;
-	public $email          = null;
-	public $cel_ph         = null;
-	public $trusted        = null;
-
-	public function getURL($URLType='name') {
-		$URLS = array(
+	public function getURL($urlType='name') {
+		$Urls = array(
 			'code'       => 'aas/oauth2/ac?',
 			'token'      => 'aas/oauth2/te',
 			'fullname'   => 'rs/prns/'.$this->oid,
@@ -44,30 +45,28 @@ class Userdatamodel extends CI_Model {
 			'contacts'   => 'rs/prns/'.$this->oid.'/ctts',
 			'openid'     => 'rs/prns/'.$this->oid
 		);
-		return $this->portalUrl.$URLS[$URLType];
+		return $this->portalUrl.$Urls[$urlType];
 	}
 
 	/* DATA GETTERS */
 
 	/**
-	* Returns User Data object contents
+	* Returns contents of User Data object 
 	* 
 	* @param $token string
-	* @return string|false
+	* @return false
 	*/
 	public function requestUserData($token="", $mode = 'fullname') {
 
 		if ( !$this->checkForTokenAndOID($token) ) {
 			return false;
 		}
-		//print "request!<br>";
 		$this->logmodel->addToLog("\n------------------#-#-#------------------\nRequesting User Data\n");
 
 		$url = $this->getURL($mode);
 		$result  = json_decode(file_get_contents($url, false, $this->getRequestContext($token)));
-		//print nl2br(str_replace(" ", "&nbsp;", print_r($result, true)));
 
-		$this->logmodel->addToLog("\nUSER DATA REQUEST SUCCESS\n".print_r($result, true));
+		$this->logmodel->addToLog("\nUser data request success\n".print_r($result, true));
 		
 		if ($mode === 'birthplace') {
 			$this->birthplace = $result->birthPlace;
@@ -86,6 +85,13 @@ class Userdatamodel extends CI_Model {
 		}
 	}
 
+
+	/**
+	* Returns context for User Data request
+	* 
+	* @param $token string
+	* @return resource
+	*/
 	private function getRequestContext($token) {
 		return stream_context_create(array(
 			'http' => array(
@@ -97,33 +103,50 @@ class Userdatamodel extends CI_Model {
 		));
 	}
 
+	/**
+	* Returns a partial user dataset
+	* 
+	* @param $result object
+	* @return resource
+	*/
 	private function setPRGDataset($result) {
-		$this->reg_region = (isset($result->region))   ? $result->region   : 0 ;
-		$this->reg_city   = (isset($result->city))     ? $result->city     : 0 ;
-		$this->reg_street = (isset($result->street))   ? $result->street   : 0 ;
-		$this->reg_house  = (isset($result->house))    ? $result->house    : 0 ;
-		$this->reg_frame  = (isset($result->frame))    ? $result->frame    : 0 ;
-		$this->reg_flat   = (isset($result->flat))     ? $result->flat     : 0 ;
-		$this->reg_fias   = (isset($result->fiasCode)) ? $result->fiasCode : 0 ;
+		$this->regRegion = (isset($result->region))   ? $result->region   : 0 ;
+		$this->regCity   = (isset($result->city))     ? $result->city     : 0 ;
+		$this->regStreet = (isset($result->street))   ? $result->street   : 0 ;
+		$this->regHouse  = (isset($result->house))    ? $result->house    : 0 ;
+		$this->regFrame  = (isset($result->frame))    ? $result->frame    : 0 ;
+		$this->regFlat   = (isset($result->flat))     ? $result->flat     : 0 ;
+		$this->regFias   = (isset($result->fiasCode)) ? $result->fiasCode : 0 ;
 	}
-
+	/**
+	* Returns a partial user dataset
+	* 
+	* @param $result object
+	* @return resource
+	*/
 	private function setPLVDataset($result) {
-		$this->plv_region = (isset($result->region))   ? $result->region   : 0 ;
-		$this->plv_city   = (isset($result->city))     ? $result->city     : 0 ;
-		$this->plv_street = (isset($result->street))   ? $result->street   : 0 ;
-		$this->plv_house  = (isset($result->house))    ? $result->house    : 0 ;
-		$this->plv_frame  = (isset($result->frame))    ? $result->frame    : 0 ;
-		$this->plv_flat   = (isset($result->flat))     ? $result->flat     : 0 ;
-		$this->plv_fias   = (isset($result->fiasCode)) ? $result->fiasCode : 0 ;
+		$this->plvRegion = (isset($result->region))   ? $result->region   : 0 ;
+		$this->plvCity   = (isset($result->city))     ? $result->city     : 0 ;
+		$this->plvStreet = (isset($result->street))   ? $result->street   : 0 ;
+		$this->plvHouse  = (isset($result->house))    ? $result->house    : 0 ;
+		$this->plvFrame  = (isset($result->frame))    ? $result->frame    : 0 ;
+		$this->plvFlat   = (isset($result->flat))     ? $result->flat     : 0 ;
+		$this->plvFias   = (isset($result->fiasCode)) ? $result->fiasCode : 0 ;
 	}
 
+	/**
+	* Returns a collection of user Data 
+	* and performs some operations with an output userdata object
+	* 
+	* @param $result object
+	* @return resource
+	*/
 	private function getUserDocCollection($url, $token) {
 		$result  = json_decode(file_get_contents($url, false, $this->getRequestContext($token)));
 		if ( !$result ) {
 			$this->logmodel->addToLog("Unable to retrieve collection specified by document: ".$url."\n");
 			return false;
 		}
-		//print nl2br(str_replace(" ", "&nbsp;", print_r($result, true)));
 		if ($result->type === "PRG") {
 			$this->setPRGDataset($result);
 		}
@@ -134,7 +157,7 @@ class Userdatamodel extends CI_Model {
 			$this->email   = (isset($result->value)) ? $result->value." ".$result->vrfStu : 0;
 		}
 		if ($result->type === "MBT") {
-			$this->cel_ph  = (isset($result->value)) ? $result->value." ".$result->vrfStu : 0;
+			$this->cellPhone  = (isset($result->value)) ? $result->value." ".$result->vrfStu : 0;
 		}
 	}
 
@@ -170,7 +193,6 @@ class Userdatamodel extends CI_Model {
 	private function checkCity($userdata, $pattern) {
 		$valid = 0;
 		foreach ( $pattern->city as $city => $streets ) {
-			//print str_replace(".", "", $userdata['birthplace'])." - - ".$city. " - - " .$userdata['prg']['city']." - - ".$userdata['plv']['city'].'<br><br>';
 			if ( $city !== $userdata['prg']['city'] &&
 				 $city !== $userdata['plv']['city'] &&
 				 !stristr(str_replace(".", "", $userdata['birthplace']), $city)
@@ -178,7 +200,6 @@ class Userdatamodel extends CI_Model {
 				$valid = ($valid) ? 0 : 1;
 			}
 		}
-		//print $valid;
 		return $valid;
 	}
 
@@ -207,8 +228,6 @@ class Userdatamodel extends CI_Model {
 			return 1;
 		}
 		$pattern = json_decode(file_get_contents($this->config->item("base_server_path")."tickets/".$objectID));
-		//print_r($userdata);
-		//print nl2br(str_replace(" ", "&nbsp;", print_r($pattern, true)));
 		$pattern = $pattern->matchParams;
 		$valid = 1;
 		if ( !isset($pattern->region) ) {
