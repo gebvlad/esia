@@ -9,7 +9,7 @@ class Userdatamodel extends CI_Model {
 
 
 	public $fullname       = null;
-	public $regregion     = null;
+	public $regRegion     = null;
 	public $regCity       = null;
 	public $regStreet     = null;
 	public $regHouse      = null;

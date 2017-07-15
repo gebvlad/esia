@@ -286,6 +286,35 @@ class Admin extends CI_Controller {
 		//print $this->requestAuthCode();
 	}
 
+	private function checkClientSystem(){
+		$urls = $this->config->item('returnURLS');
+		if ( isset($urls[$this->input->post("systemID")]) ) {
+			return true;
+		}
+		$this->logmodel->addToLog("System ID: ".$this->input->post("systemID")." not found\n");
+		$this->logmodel->writeLog("esia_ticket.log");
+		return false;
+	}
+
+	private function writeTicket($data) {
+		$ticketPath = $this->config->item("base_server_path")."tickets/".$this->input->post("ticket");
+		if ( file_put_contents($ticketPath, $data) === FALSE ) {
+			$this->logmodel->addToLog("A ticket file could not be written\n");
+			$this->logmodel->writeLog("esia_ticket.log");
+			return false;
+		}
+	}
+
+	private function parseTicketData() {
+		$data = json_encode($this->input->post("data"));
+		if ( !$data ) {
+			$this->logmodel->addToLog("Search pattern could not be parsed as valid JSON\n");
+			$this->logmodel->writeLog("esia_ticket.log");
+			return false;
+		}
+		return $data;
+	}
+
 	public function processticket() {
 		if (   !$this->input->post("ticket")
 			|| !$this->input->post("data")
@@ -298,24 +327,17 @@ class Admin extends CI_Controller {
 			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
-		$data = json_decode($this->input->post("data"));
-		if ( !$data ) {
-			$this->logmodel->addToLog("Search pattern could not be parsed as valid JSON\n");
-			$this->logmodel->writeLog("esia_ticket.log");
+
+		if ( !$this->checkClientSystem() ) {
 			return false;
 		}
-		$URLs = $this->config->item('returnURLS');
-		if ( !isset($URLs[$this->input->post("systemID")]) ) {
-			$this->logmodel->addToLog("System ID: ".$this->input->post("systemID")." not found\n");
-			$this->logmodel->writeLog("esia_ticket.log");
+		
+		$ticketData = $this->parseTicketData();
+
+		if ( !$ticketData || !$this->writeTicket($ticketData) ) {
 			return false;
 		}
 
-		if( FALSE === file_put_contents($this->config->item("base_server_path")."tickets/".$this->input->post("ticket"), $this->input->post("data"))) {
-			$this->logmodel->addToLog("A ticket file could not be written\n");
-			$this->logmodel->writeLog("esia_ticket.log");
-			return false;
-		}
 		$this->logmodel->addToLog("A ticket was processed succesfully\n");
 		$this->logmodel->writeLog("esia_ticket.log");
 		print $this->requestAuthCode( $this->input->post("systemID"), $this->input->post("ticket"));
