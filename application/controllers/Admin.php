@@ -399,9 +399,9 @@ class Admin extends CI_Controller {
 					'valid'    => $this->userdatamodel->processUserMatching($userdata, $objectID, $config->profile),
 					'trusted'  => $userdata['trusted']
 				);
-				print_r($userdata);
-				print "<br><br>";
-				print_r($backRequest);
+				//print_r($userdata);
+				//print "<br><br>";
+				//print_r($backRequest);
 
 				$this->sendCallbackToClient($returnURLID, $backRequest);
 				$this->logmodel->addToLog( "\nCOMPLETED SUCCESSFULLY!\n" );
