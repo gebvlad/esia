@@ -6,9 +6,7 @@ class Admin extends CI_Controller {
 	*  https://github.com/fr05t1k/esia/blob/master/src/OpenId.php
 	*  https://habrahabr.ru/post/276313/
 	*
-	*  DO: complete $this->getuserdata()
-	       multiscope user data requests
-	*      code the correct signature check
+	*  DO: correct a signature check
 	*/
 
 	function __construct() {
@@ -19,28 +17,22 @@ class Admin extends CI_Controller {
 	}
 
 	public $dataProfile = array(
-		'openid'     => array('openid'),
-		'contacts'   => array('contacts'),
-		'name'       => array('fullname'),
-		'birthplace' => array('birthplace'),
-		'address'    => array('birthplace', 'contacts'),
-		'fulldata'   => array('birthplace', 'contacts', 'fullname')
+		'openid'     => array("scopes" => array('openid'),								"requests" => array('openid')),
+		'contacts'   => array("scopes" => array('contacts'),							"requests" => array('contacts')),
+		'fullname'   => array("scopes" => array('fullname'),							"requests" => array('fullname')),
+		'birthplace' => array("scopes" => array('birthplace'),							"requests" => array('birthplace')),
+		'address'    => array("scopes" => array('birthplace', 'contacts'),				"requests" => array('birthplace', 'address')),
+		'fulldata'   => array("scopes" => array('birthplace', 'contacts', 'fullname'),	"requests" => array('birthplace', 'address', 'contacts', 'fullname'))
 	);
 
+	public $rTokens = array(
+		'openid'     => 'openid',
+		'contacts'   => 'contacts',
+		'address'    => 'contacts',
+		'fullname'   => 'fullname',
+		'birthplace' => 'birthplace',
+	);
 
-	public $token_address         = null;
-	public $token_address_data    = null;
-	public $token_birthplace      = null;
-	public $token_birthplace_data = null;
-	public $token_contacts        = null;
-	public $token_contacts_data   = null;
-	public $token_openid          = null;
-	public $token_openid_data     = null;
-	public $token_fullname        = null;
-	public $token_fullname_data   = null;
-	public $tokenFullInfo         = null;
-	public $tokenFullInfo_data    = null;
-	public $scope                 = null;
 	public $oid                   = null;
 	public $tlog                  = null;
 	public $portalUrl             = 'https://esia.gosuslugi.ru/';
@@ -181,10 +173,10 @@ class Admin extends CI_Controller {
 	* @return string|false
 	*/
 	private function requestAuthCode($returnURLID = 0, $objectID = "c15aa69b-b10e-46de-b124-85dbd0a9f4c9") {
-		$config = json_decode(utf8_encode(file_get_contents($this->config->item("base_server_path")."tickets/".$objectID)));
-		$this->scope = implode($this->dataProfile[$config->profile], " ");
-		//( Методические рекомендации по использованию ЕСИА v 2.23, В.6.2.1 Стандартный режим запроса авторизационного кода)
-
+		// Извлечение конфигурации запроса к ЕСИА и критериев фильтрации
+		$config      = json_decode(utf8_encode(file_get_contents($this->config->item("base_server_path")."tickets/".$objectID)));
+		$this->scope = implode($this->dataProfile[$config->profile]["scopes"], " ");
+		// (Методические рекомендации по использованию ЕСИА v 2.23, В.6.2.1 Стандартный режим запроса авторизационного кода)
 		$timestamp   = date('Y.m.d H:i:s O');
 		$this->state = $this->getState();
 		$returnURL   = $this->config->item("base_url").'admin/getuserdata/'.$this->state."/".$returnURLID.'/'.$objectID;
@@ -241,53 +233,15 @@ class Admin extends CI_Controller {
 	}
 
 	private function setTokens($profile) {
-		if ( $profile === "contacts" ) {
-			$this->token_contacts        = $this->getESIAToken($this->dataProfile[$profile][0]);
-			$this->token_contacts_data   = $this->parseToken($this->token_contacts->access_token);
-			if ($this->verifymodel->verifyToken($this->token_contacts_data)) {
-				return true;
+		foreach ($this->dataProfile[$profile]["scopes"] as $scope) {
+			$this->{"token_".$scope}         = $this->getESIAToken( $scope );
+			$this->{"token_".$scope."_data"} = $this->parseToken($this->{"token_".$scope}->access_token);
+			if ( !$this->verifymodel->verifyToken($this->{"token_".$scope."_data"}) ) {
+				return false;
 			}
 		}
-		if ( $profile === "address" ) {
-			$this->token_contacts        = $this->getESIAToken($this->dataProfile['contacts'][0]);
-			$this->token_contacts_data   = $this->parseToken($this->token_contacts->access_token);
-			$this->token_birthplace      = $this->getESIAToken($this->dataProfile['birthplace'][0]);
-			$this->token_birthplace_data = $this->parseToken($this->token_birthplace->access_token);
-
-			if ($this->verifymodel->verifyToken($this->token_contacts_data) && $this->verifymodel->verifyToken($this->token_birthplace_data)) {
-				return true;
-			}
-		}
-		if ( $profile === "fulldata" ) {
-			$this->token_contacts        = $this->getESIAToken($this->dataProfile['contacts'][0]);
-			$this->token_contacts_data   = $this->parseToken($this->token_contacts->access_token);
-			$this->token_birthplace      = $this->getESIAToken($this->dataProfile['birthplace'][0]);
-			$this->token_birthplace_data = $this->parseToken($this->token_birthplace->access_token);
-			$this->token_fullname        = $this->getESIAToken($this->dataProfile[$profile][0]);
-			$this->token_fullname_data   = $this->parseToken($this->token_fullname->access_token);
-
-			if ($this->verifymodel->verifyToken($this->token_contacts_data) && $this->verifymodel->verifyToken($this->token_birthplace_data)) {
-				return true;
-			}
-		}
-
-		if ( $profile === "name" ) {
-			$this->token_fullname        = $this->getESIAToken($this->dataProfile[$profile][0]);
-			$this->token_fullname_data   = $this->parseToken($this->token_fullname->access_token);
-			if ($this->verifymodel->verifyToken($this->token_fullname_data)) {
-				return true;
-			}
-		}
-		if ( $profile === "openid" ) {
-			$this->token_openid          = $this->getESIAToken($this->dataProfile[$profile][0]);
-			$this->token_openid_data     = $this->parseToken($this->token_openid->access_token);
-			if ($this->verifymodel->verifyToken($this->token_openid_data)) {
-				return true;
-			}
-		}
-		return false;
+		return true;
 	}
-
 
 	private function sendCallbackToClient($returnURLID, $backRequest) {
 		if ( !$this->config->item('system_online') ){
@@ -360,19 +314,37 @@ class Admin extends CI_Controller {
 		return true;
 	}
 
-	/**
-	* Calls a function requesting User Data
-	*
-	* @param $state string
-	* @param $returnURLID int
-	* @param $objectID int
-	* @return true|false
-	*/
-	public function getuserdata($state = "", $returnURLID = 0, $objectID = 0 ) {
-		if ( !$this->verifymodel->verifyState($state) ) {
-			return false;
-		}
-		//var_dump($this->input->get('code'));
+	private function getUserDataObject() {
+		return array(
+			'oid'			=> $this->oid,
+			'trusted'		=> $this->userdatamodel->trusted,
+			'fullname'		=> $this->userdatamodel->fullname,
+			'birthplace'	=> $this->userdatamodel->birthplace,
+			'cellphone'		=> $this->userdatamodel->cel_ph,
+			'email'			=> $this->userdatamodel->email,
+			'birthplace'	=> $this->userdatamodel->birthplace,
+			'prg'			=> array(
+				'region'	=> $this->userdatamodel->reg_region,
+				'city'		=> $this->userdatamodel->reg_city,
+				'street'	=> $this->userdatamodel->reg_street,
+				'house'		=> $this->userdatamodel->reg_house,
+				'frame'		=> $this->userdatamodel->reg_frame,
+				'flat'		=> $this->userdatamodel->reg_flat,
+				'fias'		=> $this->userdatamodel->reg_fias
+			),
+			'plv'			=> array(
+				'region'	=> $this->userdatamodel->plv_region,
+				'city'		=> $this->userdatamodel->plv_city,
+				'street'	=> $this->userdatamodel->plv_street,
+				'house'		=> $this->userdatamodel->plv_house,
+				'frame'		=> $this->userdatamodel->plv_frame,
+				'flat'		=> $this->userdatamodel->plv_flat,
+				'fias'		=> $this->userdatamodel->plv_fias
+			)
+		);
+	}
+
+	private function userDeniedAccess() {
 		if ( $this->input->get('error') ) {
 			$errorRequest = array(
 				'ticket'      => $objectID,
@@ -385,67 +357,50 @@ class Admin extends CI_Controller {
 			$this->logmodel->writeLog();
 			return false;
 		}
+	}
+
+	/**
+	* Calls a function requesting User Data
+	*
+	* @param $state string
+	* @param $returnURLID int
+	* @param $objectID int
+	* @return true|false
+	*/
+	public function getuserdata($state = "", $returnURLID = 0, $objectID = 0 ) {
+		if ( !$this->verifymodel->verifyState($state) ) {
+			$this->load->helper("url");
+			redirect("/");
+			return false;
+		}
+		if ( $this->userDeniedAccess() ) {
+			print "User Denied Access To Some Data";
+			$this->load->helper("url");
+			redirect("/");
+			return false;
+		}
+		//var_dump($this->input->get('code'));
+
 		if ( strlen($this->input->get('code')) ) {
 			$config = json_decode(utf8_encode(file_get_contents($this->config->item("base_server_path")."tickets/".$objectID)));
 			if ( $this->setTokens($config->profile) ) {
 				// если удалось получить и проверить все токены:
-				if ($config->profile === 'name') {
-					$this->userdatamodel->requestUserData($this->token_fullname->access_token,   'name');
+				foreach ($this->dataProfile[$config->profile]["requests"] as $request) {
+					$scope = $this->rTokens[$request];
+					$this->userdatamodel->requestUserData($this->{"token_".$scope}->access_token, $request);
 				}
-				if ($config->profile === 'birthplace') {
-					$this->userdatamodel->requestUserData($this->token_birthplace->access_token, 'birthplace');
-				}
-				if ($config->profile === 'contacts') {
-					$this->userdatamodel->requestUserData($this->token_contacts->access_token,   'contacts');
-				}
-				if ($config->profile === 'address') {
-					$this->userdatamodel->requestUserData($this->token_contacts->access_token,   'address');
-					$this->userdatamodel->requestUserData($this->token_birthplace->access_token, 'birthplace');
-				}
-				if ($config->profile === 'fulldata') {
-					$this->userdatamodel->requestUserData($this->token_contacts->access_token,   'address');
-					$this->userdatamodel->requestUserData($this->token_contacts->access_token,   'contacts');
-					$this->userdatamodel->requestUserData($this->token_birthplace->access_token, 'birthplace');
-					$this->userdatamodel->requestUserData($this->token_fullname->access_token,   'name');
-				}
-				$userdata = array(
-					'oid'			=> $this->oid,
-					'trusted'		=> $this->userdatamodel->trusted,
-					'fullname'		=> $this->userdatamodel->fullname,
-					'birthplace'	=> $this->userdatamodel->birthplace,
-					'cellphone'		=> $this->userdatamodel->cel_ph,
-					'email'			=> $this->userdatamodel->email,
-					'birthplace'	=> $this->userdatamodel->birthplace,
-					'prg'			=> array(
-						'region'	=> $this->userdatamodel->reg_region,
-						'city'		=> $this->userdatamodel->reg_city,
-						'street'	=> $this->userdatamodel->reg_street,
-						'house'		=> $this->userdatamodel->reg_house,
-						'frame'		=> $this->userdatamodel->reg_frame,
-						'flat'		=> $this->userdatamodel->reg_flat,
-						'fias'		=> $this->userdatamodel->reg_fias
-					),
-					'plv'			=> array(
-						'region'	=> $this->userdatamodel->plv_region,
-						'city'		=> $this->userdatamodel->plv_city,
-						'street'	=> $this->userdatamodel->plv_street,
-						'house'		=> $this->userdatamodel->plv_house,
-						'frame'		=> $this->userdatamodel->plv_frame,
-						'flat'		=> $this->userdatamodel->plv_flat,
-						'fias'		=> $this->userdatamodel->plv_fias
-					)
-				);
 
+				$userdata = $this->getUserDataObject();
 				$this->logmodel->addToLog( "\n------------------\nUSER DATA SET:\n".print_r($userdata, true)."\n" );
 
 				$backRequest = array(
 					'oid'      => $userdata['oid'],
 					'ticket'   => $objectID,
 					'valid'    => $this->userdatamodel->processUserMatching($userdata, $objectID, $config->profile),
-					'verified' => $userdata['trusted']
+					'trusted'  => $userdata['trusted']
 				);
-				//print_r($userdata);
-				//print "<br><br>";
+				print_r($userdata);
+				print "<br><br>";
 				print_r($backRequest);
 
 				$this->sendCallbackToClient($returnURLID, $backRequest);
@@ -460,9 +415,7 @@ class Admin extends CI_Controller {
 		return false;
 	}
 
-
-	
-	
+	/*
 	public function writeTokenFile() {
 		$objectID = "c15aa69b-b10e-46de-b124-85dbd0a9f4c9";
 		
@@ -486,6 +439,6 @@ class Admin extends CI_Controller {
 		print $json;
 		$file   = file_put_contents($this->config->item("base_server_path")."tickets/".$objectID, $json);
 	}
-	
+	*/
 }
 ?>
