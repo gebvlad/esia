@@ -286,31 +286,31 @@ class Admin extends CI_Controller {
 			|| !strlen($this->input->post("data"))
 			|| !strlen($this->input->post("systemID"))
 			) {
-			$this->logmodel->addToLog("A REQUIRED FIELD: POST['data'] or POST['ticket'] IS MISSING OR EMPTY\n");
+			$this->logmodel->addToLog("At least one of an essential fields: POST['data'] or POST['ticket'], or POST['systemID'] is missing or empty\n");
 			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
 		$data = json_decode($this->input->post("data"));
 		if ( !$data ) {
-			$this->logmodel->addToLog("SEARCH PATTERN COULD NOT BE PARSED AS VALID JSON\n");
+			$this->logmodel->addToLog("Search pattern could not be parsed as valid JSON\n");
 			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
 		$URLs = $this->config->item('returnURLS');
 		if ( !isset($URLs[$this->input->post("systemID")]) ) {
-			$this->logmodel->addToLog("SYSTEM ID: ".$this->input->post("systemID")." NOT FOUND\n");
+			$this->logmodel->addToLog("System ID: ".$this->input->post("systemID")." not found\n");
 			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
 
 		if( FALSE === file_put_contents($this->config->item("base_server_path")."tickets/".$this->input->post("ticket"), $this->input->post("data"))) {
-			$this->logmodel->addToLog("A TICKET COULD NOT BE WRITTEN\n");
+			$this->logmodel->addToLog("A ticket file could not be written\n");
 			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
-		$this->logmodel->addToLog("A TICKET WAS PROCESSED SUCCESFULLY\n");
+		$this->logmodel->addToLog("A ticket was processed succesfully\n");
 		$this->logmodel->writeLog("esia_ticket.log");
-		print $this->requestAuthCode($returnURLID = 0, $this->input->post("ticket"));
+		print $this->requestAuthCode( $this->input->post("systemID"), $this->input->post("ticket"));
 		return true;
 	}
 
@@ -344,7 +344,7 @@ class Admin extends CI_Controller {
 		);
 	}
 
-	private function userDeniedAccess() {
+	private function userDeniedAccess($returnURLID, $objectID) {
 		if ( $this->input->get('error') ) {
 			$errorRequest = array(
 				'ticket'      => $objectID,
@@ -352,7 +352,6 @@ class Admin extends CI_Controller {
 				'description' => $this->input->get('error_description')
 			);
 			$this->logmodel->addToLog( "USER DENIED ACCESS" );
-			//print_r($errorRequest);
 			$this->sendCallbackToClient($returnURLID, $errorRequest);
 			$this->logmodel->writeLog();
 			return false;
@@ -373,16 +372,14 @@ class Admin extends CI_Controller {
 			redirect("/");
 			return false;
 		}
-		if ( $this->userDeniedAccess() ) {
-			print "User Denied Access To Some Data";
+		if ( $this->userDeniedAccess($returnURLID, $objectID) ) {
 			$this->load->helper("url");
 			redirect("/");
 			return false;
 		}
-		//var_dump($this->input->get('code'));
 
 		if ( strlen($this->input->get('code')) ) {
-			$config = json_decode(utf8_encode(file_get_contents($this->config->item("base_server_path")."tickets/".$objectID)));
+			$config = json_decode(file_get_contents($this->config->item("base_server_path")."tickets/".$objectID));
 			if ( $this->setTokens($config->profile) ) {
 				// если удалось получить и проверить все токены:
 				foreach ($this->dataProfile[$config->profile]["requests"] as $request) {

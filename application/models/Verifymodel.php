@@ -90,16 +90,22 @@ class Verifymodel extends CI_Model {
 		$algs = array(
 			'RS256' => 'sha256'
 		);
-		$path        = $this->config->item("base_server_path").'application/views/esia/';
-		file_put_contents($path.'signature', utf8_encode($accessToken['signature']));
-		file_put_contents($path.'hashpart', utf8_encode($accessToken['hashpart']));
-		$result = exec("openssl dgst -sha256 -verify ".$path."cert/esia2.pem -signature ".$path."signature ".$path."hashpart");
-		$this->logmodel->addToLog( "SIGNATURE CHECK COMMAND:\n  openssl dgst -sha256 -verify ".$path."cert/esia2.pem -signature ".$path."signature ".$path."hashpart\nRESULT: ".$result."\n------------------\n" );
-		return true;
-		$this->logmodel->addToLog( "SIGNATURE CHECK RESULT: ".$result."\n------------------\n" );
+		$path = $this->config->item("cert_path").'esia/';
+		file_put_contents($path.'signature', $accessToken['signature']);
+		file_put_contents($path.'hashpart',  $accessToken['hashpart']);
 
+		$command = "openssl dgst -sha256 -verify ".$path."esia2.pem -signature ".$path."signature ".$path."hashpart";
+		$result  = exec($command);
+		$this->logmodel->addToLog( "SIGNATURE CHECK COMMAND:\n ".$command."\nRESULT: ".$result."\n------------------\n" );
+		
+		/*
+		* sorry, but we stop here for now...
+		*/
+		return true;
+
+		$this->logmodel->addToLog( "SIGNATURE CHECK RESULT: ".$result."\n------------------\n" );
 		$hash = $this->getSecret("HEADER.PAYLOAD");
-		if ( $hash === $accessToken['signature'] ) {
+		if ( $hash  === $accessToken['signature'] ) {
 			$this->logmodel->addToLog("SIGNATURE: MATCHED OK!\n");
 			return true;
 		}
@@ -127,22 +133,23 @@ class Verifymodel extends CI_Model {
 		$this->logmodel->writeLog();
 		return false;
 	}
-
+	/*
 	public function verifyx() {
-		/*
+		
 			openssl x509 -pubkey -noout -in wifi.sha256.crt > wifi.sha256.pem
 			openssl dgst -sha256 -verify /var/www/html/wifi/application/views/esia/cert/self/wifi.sha256.pem -signature signature hashpart
-		*/
+		
 
 		$path   = $this->config->item("base_server_path").'application/views/esia/';
 		$result = null;
-		//$hashpart    = file_get_contents($path.'hashpart');
-		//$signature   = file_get_contents($path.'signature');
-		//$certContent = file_get_contents($path.'cert/self/wifi.sha256.crt');
-		//$cert        = openssl_pkey_get_public ( $certContent );
-		//json_decode($this->base64UrlSafeDecode($chunks[1])),
-		//$result      = openssl_verify ( $hashpart, $signature, $cert, "SHA256" );
-		//exec("openssl dgst -sha256 -verify ".$path."cert/self/wifi.sha256.crt -signature ".$path."signature ".$path."hashpart", $result);
+		$hashpart    = file_get_contents($path.'hashpart');
+		$signature   = file_get_contents($path.'signature');
+		$certContent = file_get_contents($path.'cert/self/wifi.sha256.crt');
+		$cert        = openssl_pkey_get_public ( $certContent );
+		json_decode($this->base64UrlSafeDecode($chunks[1])),
+		$result      = openssl_verify ( $hashpart, $signature, $cert, "SHA256" );
+		exec("openssl dgst -sha256 -verify ".$path."cert/self/wifi.sha256.crt -signature ".$path."signature ".$path."hashpart", $result);
 		var_dump($result);
 	}
+	*/
 }

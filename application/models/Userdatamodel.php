@@ -14,6 +14,25 @@ class Userdatamodel extends CI_Model {
 	* @param string $URLType: code|token|fullname|birthplace|address|contacts|openid
 	* @return string
 	*/
+	public $fullname       = null;
+	public $reg_region     = null;
+	public $reg_city       = null;
+	public $reg_street     = null;
+	public $reg_house      = null;
+	public $reg_frame      = null;
+	public $reg_flat       = null;
+	public $reg_fias       = null;
+	public $plv_region     = null;
+	public $plv_city       = null;
+	public $plv_street     = null;
+	public $plv_house      = null;
+	public $plv_frame      = null;
+	public $plv_flat       = null;
+	public $plv_fias       = null;
+	public $birthplace     = null;
+	public $email          = null;
+	public $cel_ph         = null;
+	public $trusted        = null;
 
 	public function getURL($URLType='name') {
 		$URLS = array(
