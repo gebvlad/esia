@@ -1,7 +1,7 @@
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
 
-class Admin extends CI_Controller {
+class Esiabridge extends CI_Controller {
 	/* Многие пожелания добра:
 	*  https://github.com/fr05t1k/esia/blob/master/src/OpenId.php
 	*  https://habrahabr.ru/post/276313/
@@ -174,22 +174,35 @@ class Admin extends CI_Controller {
 	*/
 	private function requestAuthCode($returnURLID = 0, $objectID = "c15aa69b-b10e-46de-b124-85dbd0a9f4c9") {
 		// Извлечение конфигурации запроса к ЕСИА и критериев фильтрации
-		$config      = json_decode(utf8_encode(file_get_contents($this->config->item("base_server_path")."tickets/".$objectID)));
+		$file = $this->config->item("base_server_path")."tickets/".$objectID;
+		if ( !file_exists($file) ) {
+			$this->logmodel->addToLog("No valid config file supplied\n");
+			$this->logmodel->writeLog("esia_authcode.log");
+		}
+		$config      = json_decode(file_get_contents($file));
+		if ( !isset($this->dataProfile[$config->profile]) ) {
+			$this->logmodel->addToLog("Profile is unknown\n");
+			$this->logmodel->writeLog("esia_authcode.log");
+			print "Error while getting authorization code";
+			return false;
+		}
 		$this->scope = implode($this->dataProfile[$config->profile]["scopes"], " ");
 		// (Методические рекомендации по использованию ЕСИА v 2.23, В.6.2.1 Стандартный режим запроса авторизационного кода)
 		$timestamp   = date('Y.m.d H:i:s O');
 		$this->state = $this->getState();
-		$returnURL   = $this->config->item("base_url").'admin/getuserdata/'.$this->state."/".$returnURLID.'/'.$objectID;
+		$returnURL   = $this->config->item("base_url").'esiabridge/token/'.$this->state."/".$returnURLID.'/'.$objectID;
 		$secret      = $this->getSecret($this->scope.$timestamp.$this->config->item("IS_MNEMONICS").$this->state);
 		$requestParams = array(
 			'client_id'		=> $this->config->item("IS_MNEMONICS"),
+			'cid'			=> $this->config->item("IS_MNEMONICS"),
+			'rurl'			=> "http://esia.arhcity.ru/redirect",
 			'client_secret'	=> $secret,
 			'redirect_uri'	=> $returnURL,
 			'scope'			=> $this->scope,
 			'response_type'	=> 'code',
 			'state'			=> $this->state,
 			'timestamp'		=> $timestamp,
-			'access_type'	=> 'offine'
+			'access_type'	=> 'online'
 		);
 		$options = array(
 			'url'        => $this->userdatamodel->getURL('code'),
@@ -203,7 +216,8 @@ class Admin extends CI_Controller {
 		// OR
 		// in case we use Codeigniter
 		// return to Codeigniter View
-		return $this->load->view('esia/auth', $options, true);
+		//return $this->load->view('esia/auth', $options, true);
+		return $options['url'].$options['get_params'];
 	}
 
 	/**
@@ -214,8 +228,8 @@ class Admin extends CI_Controller {
 	private function getESIAToken($scope) {
 		$timestamp   = date('Y.m.d H:i:s O');
 		$this->state = $this->getState();
-		$returnURL = $this->config->item("base_url").'admin/getuserdata';
-		$secret    = $this->getSecret($scope.$timestamp.$this->config->item("IS_MNEMONICS").$this->state);
+		$returnURL   = $this->config->item("base_url").'esiabridge/token';
+		$secret      = $this->getSecret($scope.$timestamp.$this->config->item("IS_MNEMONICS").$this->state);
 		
 		$request   = array(
 			'client_id'		=> $this->config->item("IS_MNEMONICS"),
@@ -250,10 +264,12 @@ class Admin extends CI_Controller {
 	/**
 	* Send a callback to a client system with authentication result
 	* 
-	* @return object|false
+	* @return string|false
 	*/
 	private function sendCallbackToClient($returnURLID, $backRequest) {
 		if ( !$this->config->item('system_online') ){
+			$this->logmodel->addToLog( "System is now offline! Check config.\n" );
+			$this->logmodel->writeLog();
 			return false;
 		}
 		$options = array(
@@ -265,14 +281,26 @@ class Admin extends CI_Controller {
 		);
 		$context = stream_context_create($options);
 		$urls    = $this->config->item('returnURLS');
-		$url     = $urls[$returnURLID];
-		$result  = file_get_contents($url, false, $context);
-		if ($result === FALSE) {
-			$this->logmodel->addToLog( "Callback request to ".$url." failed or system now offline!\n" );
+		if (!isset($urls[$returnURLID])) {
+			$this->logmodel->addToLog( "No return URL found by specified index. Check config.\n" );
 			$this->logmodel->writeLog();
 			return false;
 		}
-		return $result;
+		$url     = $urls[$returnURLID];
+		$result  = file_get_contents($url, false, $context);
+		//var_dump($http_response_header);
+		$location = false;
+		foreach ( $http_response_header as $header ) {
+			if ( preg_match("/Location:(.*)/i", $header, $matches) ) {
+				$location = trim($matches[1]);
+			}
+		}
+		if ($result === FALSE) {
+			$this->logmodel->addToLog( "Callback request to ".$url." failed! Check config.\n" );
+			$this->logmodel->writeLog();
+			return false;
+		}
+		return $location;
 	}
 
 	/* MAIN SECTION GETTER*/
@@ -281,9 +309,11 @@ class Admin extends CI_Controller {
 	* redirection
 	*/
 	public function index () {
-		print "No more..";
+		header("Location: http://www.arhcity.ru");
+		//print "No more..";
+
 		return false;
-		//print $this->requestAuthCode();
+		//print '<a href="'.$this->requestAuthCode().'">Вход через ЕСИА</a>';
 	}
 
 	private function checkClientSystem(){
@@ -298,15 +328,16 @@ class Admin extends CI_Controller {
 
 	private function writeTicket($data) {
 		$ticketPath = $this->config->item("base_server_path")."tickets/".$this->input->post("ticket");
-		if ( file_put_contents($ticketPath, $data) === FALSE ) {
+		if ( file_put_contents($ticketPath, json_encode($data)) === FALSE ) {
 			$this->logmodel->addToLog("A ticket file could not be written\n");
 			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
+		return true;
 	}
 
 	private function parseTicketData() {
-		$data = json_encode($this->input->post("data"));
+		$data = json_decode($this->input->post("data"));
 		if ( !$data ) {
 			$this->logmodel->addToLog("Search pattern could not be parsed as valid JSON\n");
 			$this->logmodel->writeLog("esia_ticket.log");
@@ -316,6 +347,7 @@ class Admin extends CI_Controller {
 	}
 
 	public function processticket() {
+		//print_r($this->input->post());
 		if (   !$this->input->post("ticket")
 			|| !$this->input->post("data")
 			|| !$this->input->post("systemID")
@@ -323,7 +355,7 @@ class Admin extends CI_Controller {
 			|| !strlen($this->input->post("data"))
 			|| !strlen($this->input->post("systemID"))
 			) {
-			$this->logmodel->addToLog("At least one of an essential fields: POST['data'] or POST['ticket'], or POST['systemID'] is missing or empty\n");
+			$this->logmodel->addToLog("At least one of an essential fields: POST['data'] or POST['ticket'] or POST['systemID'] is missing or empty\n");
 			$this->logmodel->writeLog("esia_ticket.log");
 			return false;
 		}
@@ -395,20 +427,21 @@ class Admin extends CI_Controller {
 	* @param $objectID int
 	* @return true|false
 	*/
-	public function getuserdata($state = "", $returnURLID = 0, $objectID = 0 ) {
-		if ( !$this->verifymodel->verifyState($state) ) {
+	public function token($state = "", $returnURLID = 0, $objectID = 0 ) {
+		$urls = $this->config->item("returnURLS");
+		if ( !$this->verifymodel->verifyState($state) || $this->userDeniedAccess($returnURLID, $objectID) ) {
 			$this->load->helper("url");
-			redirect("/");
-			return false;
-		}
-		if ( $this->userDeniedAccess($returnURLID, $objectID) ) {
-			$this->load->helper("url");
-			redirect("/");
+			redirect(strstr($urls[$returnURLID],"&",TRUE));
 			return false;
 		}
 
 		if ( strlen($this->input->get('code')) ) {
-			$config = json_decode(file_get_contents($this->config->item("base_server_path")."tickets/".$objectID));
+			$ticket_file = $this->config->item("base_server_path")."tickets/".$objectID;
+			if (!file_exists($ticket_file)) {
+				$this->logmodel->addToLog( "\nUnable to read ticket file!\n" );
+				return false;
+			}
+			$config = json_decode(file_get_contents($ticket_file));
 			if ( $this->setTokens($config->profile) ) {
 				// если удалось получить и проверить все токены:
 				foreach ($this->dataProfile[$config->profile]["requests"] as $request) {
@@ -418,10 +451,17 @@ class Admin extends CI_Controller {
 
 				$userdata = $this->getUserDataObject();
 				$this->logmodel->addToLog( "\n------------------\nUSER DATA SET:\n".print_r($userdata, true)."\n" );
-
+				$sendData = array();
+				if ($config->profile === "fullname") {
+					$sendData = $userdata['fullname'];
+				}
+				if ($config->profile === "fulldata") {
+					$sendData = $userdata;
+				}
 				$backRequest = array(
 					'oid'      => $userdata['oid'],
 					'ticket'   => $objectID,
+					'data'     => json_encode($sendData),
 					'valid'    => $this->userdatamodel->processUserMatching($userdata, $objectID, $config->profile),
 					'trusted'  => $userdata['trusted']
 				);
@@ -429,9 +469,19 @@ class Admin extends CI_Controller {
 				//print "<br><br>";
 				//print_r($backRequest);
 
-				$this->sendCallbackToClient($returnURLID, $backRequest);
+				$result      = $this->sendCallbackToClient($returnURLID, $backRequest);
+				if ( file_exists($ticket_file) ) {
+					unlink($ticket_file);
+				}
 				$this->logmodel->addToLog( "\nCOMPLETED SUCCESSFULLY!\n" );
 				$this->logmodel->writeLog();
+				$this->load->helper('url');
+				//var_dump($result);
+				if ( $result ) {
+					redirect( $result );
+					return true;
+				}
+				redirect($urls[$returnURLID]);
 				return true;
 			}
 			$this->logmodel->addToLog( "\nUNABLE TO COLLECT REQUIRED ACCESS TOKENS!\n" );
@@ -440,7 +490,5 @@ class Admin extends CI_Controller {
 		$this->logmodel->writeLog();
 		return false;
 	}
-
-
 }
 ?>
